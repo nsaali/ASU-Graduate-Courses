@@ -1,0 +1,171 @@
+---
+title: "R Notebook"
+output:
+  word_document: default
+  html_notebook: default
+---
+
+```{r}
+### Nick Saali - Th430 - Fall '21 BIO 514 Project
+
+#Load Packages
+
+shhh<-suppressPackageStartupMessages
+shhh(library(sciplot))
+shhh(library(car))
+shhh(library(ggplot2))
+shhh(library(gplots))
+shhh(library(dplyr))
+shhh(library(readxl))
+shhh(library(mosaic))
+
+#Useful for adjusting plot margins
+margs<-par(mgp=c(2.5,1,0))
+
+##Two-Factor (Two-Way) ANOVA
+
+#Organize data with dplyr
+#Group U and L SACN into one group so as to compare...
+#two separate river areas (MISS and SACN)
+
+eagle.data<-read_excel('Bald Eagle Data/Nestlings.xlsx')
+
+
+eagle.data$StudyArea[eagle.data$StudyArea=='U-SACN'] <- 'SACN'
+eagle.data$StudyArea[eagle.data$StudyArea=='L-SACN'] <- 'SACN'
+
+Hg.data<-select(eagle.data,StudyArea,Analyte,ResultValue,EagleSex
+          )%>%filter(Analyte=='Mercury'
+          )%>%filter(StudyArea%in%c('MISS','SACN'))
+
+#Summarize dataset to see organization and classifications          
+summary(Hg.data)
+str(Hg.data)
+
+#Convert Characters to Factors just in case..
+Hg.data$StudyArea<-as.factor(Hg.data$StudyArea)
+Hg.data$EagleSex<-as.factor(Hg.data$EagleSex)
+
+
+#NOTE: Study Area Abbreviations Below
+#   MISS = Mississippi National River and Recreation Area 
+#   SACN = Saint Croix National Scenic River
+
+
+#Plot Interaction Data
+margs
+boxplot(ResultValue~StudyArea*EagleSex,data=Hg.data,
+           vertical=TRUE,
+           method='jitter',xlab='Sex & River Area Combination',
+           ylab='Mercury (ppb)'
+           ,main='Nestling Whole-Blood Mercury by Sex & River Area Combination',cex.main=0.75,cex.lab=0.8,cex.axis=0.6,
+           ylim=c(100,700),pch=1,las=1)
+
+
+#Plot Study Area
+margs
+stripchart(ResultValue~StudyArea,data=Hg.data,
+           vertical=TRUE,
+           method='jitter',xlab='River Area',ylab='Mercury (ppb) 
+           ',main=' Nestling Whole-Blood Mercury
+           Concentration in Two Different River Areas',cex.main=0.75,cex.lab=0.8,cex.axis=0.8,
+           ylim=c(100,700),pch=1,las=1)
+
+legend('topleft',c('DataPoints','Average'),
+       cex=.8,col=c('black','red'),pch=c(1,19))
+
+Hg.avgs<-tapply(Hg.data$ResultValue,Hg.data$StudyArea,mean)
+
+points(Hg.avgs,pch=19,col='red')
+
+
+#Plot Sexes
+margs
+stripchart(ResultValue~EagleSex,data=Hg.data,vertical=TRUE,
+           method='jitter',xlab='Nestling Sex',ylab='Mercury 
+           (ppb)',main=' Nestling Whole-Blood Mercury
+           Concentrations by Sex',cex.main=0.75,cex.lab=0.8,cex.axis=0.8,
+           ylim=c(100,700),pch=1,offset=1)
+           
+legend('topleft',c('DataPoints','Average')
+       ,cex=.8,col=c('black','orange'),pch=c(1,19))
+
+Hg.avgs2<-tapply(Hg.data$ResultValue,Hg.data$EagleSex,mean)
+
+points(Hg.avgs2,pch=19,col='orange')
+
+
+
+#Fit the ANOVA model
+
+eagle.model<-lm(ResultValue~StudyArea*EagleSex,data=Hg.data)
+             anova(eagle.model)
+
+#Get Residuals & Test ANOVA Assumptions: Normality and Equal Variance
+#Using Shapiro-Wilk and Levene
+#Using significance level of 0.05
+
+Hg.data$res<-residuals(eagle.model)
+
+leveneTest(res~StudyArea*EagleSex,data = Hg.data)
+
+shapiro.test(Hg.data$res)
+qqnorm(Hg.data$res)
+
+##Reject both null hypotheses of Normality and Equal Variance
+##Attempt to Rescue Normality/Equal Variance ...
+##with Log Transform of Mercury Concentration Data
+
+Hg.data$logResultValue<-log(Hg.data$ResultValue)
+
+log.eagle.model<-lm(logResultValue~StudyArea*EagleSex,data = 
+                      Hg.data)
+anova(log.eagle.model)
+
+Hg.data$logres<-residuals(log.eagle.model)
+
+leveneTest(logres~StudyArea*EagleSex,data = Hg.data)
+
+shapiro.test(Hg.data$logres)
+qqnorm(Hg.data$logres)
+
+#Normality Rescued
+#Equal Variance Rescued 
+#Location Effect, No Sex or Interaction effect
+
+##Move forward with TukeyHSD Two Way ANOVA
+
+TukeyHSD(log.eagle.model)
+
+
+##Significant difference in  mean mercury between both areas
+##No Significant difference in mean mercury between sexes
+##No Significant Interaction
+
+
+#Tukey Plot Study Areas
+margs
+plot(logResultValue~StudyArea,data = Hg.data,xlab='River Area',ylab = 'log[Mercury] (ppb)',ylim=c(4.5,7.0),main='TukeyPlot of Mercury Data for Mississippi and St. Croix River Areas',cex.main=0.75)
+     text(x=1:2,y=7.0,labels = c('a','b'))
+
+#Tukey Plot Sexes
+margs
+plot(logResultValue~EagleSex,data=Hg.data,xlab='Nestling Sex'
+     ,ylab= 'log[Mercury](ppb)',ylim=c(4.0,7.0),main='TukeyPlot of Male and Female Nestling Mercury Data',cex.main=0.75)
+     
+text(x=1:2,y=7.0,labels = c('a','a'))
+     
+
+#Interaction Plot
+
+     lineplot.CI(StudyArea,logResultValue, group=EagleSex , 
+                 data = Hg.data,cex = 1.5,
+                 xlab = 'River Area', ylab = 'log [Mercury](ppb)', 
+                 cex.lab = 1.2, x.leg = 1,
+                 col = c('blue','orange'), pch = c(16,16),
+                 main='Mercury Levels of Male and Female 
+                 Nestlings at two different River Areas',
+                 ylim = c(4.8,5.8),cex.main=0.75)
+
+
+```
